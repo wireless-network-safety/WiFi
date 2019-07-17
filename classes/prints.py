@@ -52,7 +52,7 @@ class PRINTS:
     # Print banner with info
     def banner(self):
         print(self.__BOLD + "\n+--------------------------------------------------------------------------------------------+" + self.__ENDC)
-        print(self.__BOLD + "|NetSav v3.0                                                                                 |" + self.__ENDC)
+        print(self.__BOLD + "|NetSav v4.1                                                                                 |" + self.__ENDC)
         print(self.__BOLD + "|Coded by Alexey, Hodaya & Shir                                                              |" + self.__ENDC)
         print(self.__BOLD + "+--------------------------------------------------------------------------------------------+\n" + self.__ENDC)
     
